@@ -28,7 +28,7 @@ export class NotionService {
 		const firstName = dto.first_name ? dto.first_name : dto.username;
 		const lastName = dto.last_name ? dto.last_name : " ";
 
-		const res = await this.notionClient.pages.create({
+		return await this.notionClient.pages.create({
 			cover: {
 				type: "external",
 				external: {
@@ -59,35 +59,32 @@ export class NotionService {
 					type: "number",
 					number: dto.id,
 				},
-				//@ts-ignore
-				// Запись: {
-				// 	type: "relation",
-				// 	relation: [
-				// 		{
-				// 			id: idRelations,
-				// 		},
-				// 	],
-				// },
 			},
-		});
-		return res;
-	}
-
-	async getIndividualPage(pageId: string) {
-		return await this.notionClient.pages.retrieve({
-			page_id: pageId,
 		});
 	}
 
 	// Получаем Свободные слоты из Рабочего календаря
 	async getAvailableDate() {
+		const toDay = new Date();
+		const toDayIso = toDay.toISOString();
+
 		const response = await this.notionClient.databases.query({
 			database_id: this.configService.get<string>("NOTION_DB_WORK_TIME"),
 			filter: {
-				property: "Tags",
-				select: {
-					equals: "Свободно",
-				},
+				and: [
+					{
+						property: "Tags",
+						select: {
+							equals: "Свободно",
+						},
+					},
+					{
+						property: "Date",
+						date: {
+							on_or_after: toDayIso,
+						},
+					},
+				],
 			},
 			sorts: [
 				{
@@ -103,7 +100,7 @@ export class NotionService {
 	async createItem(id: string, dto: any) {
 		const client = await this.findClient(dto);
 
-		const response = await this.notionClient.pages.update({
+		return await this.notionClient.pages.update({
 			page_id: id,
 			properties: {
 				Клиент: {
@@ -120,7 +117,6 @@ export class NotionService {
 				},
 			},
 		});
-		return response;
 	}
 
 	// Функция для создания кнопок с датами для записи
@@ -193,69 +189,68 @@ export class NotionService {
 		return response.results;
 	}
 
-	// async getPageContent(pageId: string) {
-	// 	return await this.notionClient.blocks.children.list({
-	// 		block_id: pageId,
-	// 	});
-	// }
+	// Возвращаем "Мои записи" уже отредактированными
+	async returnMyItem(dto: any) {
+		const items = await this.getMyItem(dto);
+		const myItems = [];
 
-	// async getAllPages(pageId: string) {
-	// 	const pages = [];
-	// 	const blocks = await this.getPageContent(pageId);
-	// 	console.log("blocks: ", blocks);
-	// 	// @ts-ignore
-	// 	// for (const block of blocks) {
-	// 	// 	pages.push(block);
-	// 	//
-	// 	// 	if (block.has_children) {
-	// 	// 		const childPages = await this.getAllPages(block.id);
-	// 	// 		pages = pages.concat(childPages);
-	// 	// 	}
-	// 	// }
-	//
-	// 	//return pages;
-	// }
+		items.forEach((item) => {
+			function padNumber(number) {
+				return number < 10 ? "0" + number : number;
+			}
 
-	// async getDatabaseWithPages() {
-	// 	const databaseItems = await this.getDatabase();
-	// 	const dates = [];
-	// 	const result = [];
-	//
-	// 	databaseItems.forEach((item) => {
-	// 		//@ts-ignore
-	// 		dates.push(item.properties.Date.date);
-	// 	});
-	//
-	// 	dates.forEach((date) => {
-	// 		const start = new Date(date.start);
-	// 		const end = new Date(date.end);
-	//
-	// 		// const month = test.getMonth() + 1; // getMonth() возвращает месяц от 0 до 11, поэтому добавляем 1
-	// 		// const day = test.getDate();
-	// 		const hourStart = start.getHours();
-	// 		const hourEnd = end.getHours();
-	//
-	// 		result.push({
-	// 			value: `${hourStart}-${hourEnd}`,
-	// 		});
-	//
-	// 		// console.log("hourStart:", hourStart);
-	// 		// console.log("hourEnd:", hourEnd);
-	// 		// console.log("Час:", hour);
-	// 	});
-	// 	return result;
-	//
-	// 	//console.log(dates);
-	//
-	// 	// for (const item of databaseItems) {
-	// 	// 	// @ts-ignore
-	// 	// 	//console.log(item.properties);
-	// 	// 	const pageId = item.id;
-	// 	// 	// const pageContent = "pup";
-	// 	// 	const pageContent = await this.getAllPages(pageId);
-	// 	// 	console.log(`Page ID: ${pageId}`, pageContent);
-	// 	// }
-	// }
+			function getMonthName(item) {
+				const months = [
+					"Января",
+					"Февраля",
+					"Марта",
+					"Апреля",
+					"Мая",
+					"Июня",
+					"Июля",
+					"Августа",
+					"Сентября",
+					"Октября",
+					"Ноября",
+					"Декабря",
+				];
+				return months[item.getMonth()];
+			}
+
+			// @ts-ignore
+			const start = new Date(item.properties.Date.date.start);
+			// @ts-ignore
+			const end = new Date(item.properties.Date.date.end);
+			const day = start.getDate();
+			const hourStart = start.getHours();
+			const minutesStart = padNumber(start.getMinutes());
+			const hourEnd = end.getHours();
+			const minutesEnd = padNumber(end.getMinutes());
+			const month = getMonthName(start);
+
+			myItems.push({
+				id: item.id,
+				value: `${day} ${month}, ${hourStart}:${minutesStart}-${hourEnd}:${minutesEnd}`,
+			});
+		});
+
+		return myItems;
+	}
+
+	// Удаляем запись
+	async deleteItem(id: string) {
+		return await this.notionClient.pages.update({
+			page_id: id,
+			properties: {
+				Клиент: {
+					relation: [],
+				},
+				Tags: {
+					select: {
+						name: "Свободно",
+					},
+				},
+			},
+		});
+	}
 }
-
-//https://www.notion.so/nikifforov/51c3c2b3a25b430aa5c13d6ef94b674c?v=22393053308f4dd481b7f5d4a00a1706&pvs=4

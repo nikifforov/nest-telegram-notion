@@ -3,7 +3,6 @@ import { Context, Markup, Telegraf } from "telegraf";
 import { ConfigService } from "@nestjs/config";
 import { NotionService } from "../notion/notion.service";
 import axios from "axios";
-import { Logger } from "@nestjs/common";
 
 @Update()
 export class BotService {
@@ -88,7 +87,6 @@ export class BotService {
 
 		const buttons = await this.notionService.getButtons();
 
-		//console.log(buttons);
 		await ctx.reply(
 			"Свободные даты для записи:",
 			Markup.inlineKeyboard(
@@ -105,8 +103,6 @@ export class BotService {
 		);
 	}
 
-	//
-	// @Action(/book_[a-f0-9-]{36}/)
 	@Action(/book_.+/)
 	async onButtonAction(@Ctx() ctx: Context) {
 		// @ts-ignore
@@ -120,7 +116,6 @@ export class BotService {
 
 		const buttons = await this.notionService.getButtons();
 
-		//console.log(buttons);
 		await ctx.reply(
 			"Свободные даты для записи:",
 			Markup.inlineKeyboard(
@@ -151,13 +146,83 @@ export class BotService {
 	@Action("my_records")
 	async onMyRecords(@Ctx() ctx: Context) {
 		// Логика для получения записей пользователя
-		await ctx.reply("Ваши записи:");
-		Logger.log(await this.notionService.getMyItem(ctx.from));
+		const myItems = await this.notionService.returnMyItem(ctx.from);
+
+		if (myItems.length > 0) {
+			await ctx.replyWithHTML(
+				`<b>Ваши записи:</b>` +
+					`${myItems.map((item: { id: string; value: string }) => {
+						return "\n" + `✅ ${item.value}`;
+					})}`,
+				Markup.inlineKeyboard([Markup.button.callback("Назад", "back_to_start")]),
+			);
+		} else {
+			await ctx.replyWithHTML(`<b>${ctx.from.first_name}</b>, у вас нет записей`);
+			await this.onStart(ctx);
+		}
 	}
 
 	@Action("cancel")
 	async onCancel(@Ctx() ctx: Context) {
 		// Логика для отмены записи
-		await ctx.reply("Отмена записи:");
+		const myItems = await this.notionService.returnMyItem(ctx.from);
+		if (myItems.length > 0) {
+			await ctx.replyWithHTML(
+				`<b>Ваши записи:</b>`,
+				Markup.inlineKeyboard(
+					[
+						...myItems.map((item: { id: string; value: string }) =>
+							Markup.button.callback(item.value, `cnl_${item.id}_${item.value}`),
+						),
+						Markup.button.callback("Назад", "back_to_start"),
+					],
+					{
+						columns: 2,
+					},
+				),
+			);
+		} else {
+			await ctx.replyWithHTML(`<b>${ctx.from.first_name}</b>, у вас нет записей`);
+			await this.onStart(ctx);
+		}
+	}
+
+	@Action(/cnl_.+/)
+	async onCancelAction(@Ctx() ctx: Context) {
+		// @ts-ignore
+		const data = ctx.match[0].split("_");
+		const id = data[1];
+		const value = data.slice(2).join("_");
+
+		await this.notionService.deleteItem(id);
+		await ctx.answerCbQuery(); // Оповещает пользователя о нажатии кнопки
+		await ctx.replyWithHTML(`✅ <b>${ctx.from.first_name}</b> вы отменили запись на: ${value}`);
+
+		// отправляем уведомление владельцу бота об отмене записи
+		await this.bot.telegram.sendMessage(
+			this.configService.get("ADMIN_CHAT_ID"),
+			`${ctx.from.first_name} отменил запись на ${value}`,
+		);
+
+		const myItems = await this.notionService.returnMyItem(ctx.from);
+		if (myItems.length > 0) {
+			await ctx.replyWithHTML(
+				`<b>Ваши записи:</b>`,
+				Markup.inlineKeyboard(
+					[
+						...myItems.map((item: { id: string; value: string }) =>
+							Markup.button.callback(item.value, `cnl_${item.id}_${item.value}`),
+						),
+						Markup.button.callback("Назад", "back_to_start"),
+					],
+					{
+						columns: 2,
+					},
+				),
+			);
+		} else {
+			await ctx.replyWithHTML(`<b>${ctx.from.first_name}</b>, у вас нет записей`);
+			await this.onStart(ctx);
+		}
 	}
 }
