@@ -147,7 +147,6 @@ export class BotService {
 	async onMyRecords(@Ctx() ctx: Context) {
 		// Логика для получения записей пользователя
 		const myItems = await this.notionService.returnMyItem(ctx.from);
-
 		if (myItems.length > 0) {
 			await ctx.replyWithHTML(
 				`<b>Ваши записи:</b>` +

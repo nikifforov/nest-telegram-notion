@@ -174,10 +174,20 @@ export class NotionService {
 		const response = await this.notionClient.databases.query({
 			database_id: this.configService.get<string>("NOTION_DB_WORK_TIME"),
 			filter: {
-				property: "Клиент",
-				relation: {
-					contains: clientId,
-				},
+				and: [
+					{
+						property: "Клиент",
+						relation: {
+							contains: clientId,
+						},
+					},
+					{
+						property: "Status",
+						status: {
+							does_not_equal: "Done",
+						},
+					},
+				],
 			},
 			sorts: [
 				{
