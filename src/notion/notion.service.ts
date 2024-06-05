@@ -23,7 +23,7 @@ export class NotionService {
 		return res.results;
 	}
 
-	// Создание нового клиента и запись на прием
+	// Создание нового клиента
 	async createNewClient(dto: any, photoUrl: string) {
 		const firstName = dto.first_name ? dto.first_name : dto.username;
 		const lastName = dto.last_name ? dto.last_name : " ";
